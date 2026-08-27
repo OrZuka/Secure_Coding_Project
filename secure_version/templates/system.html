@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% block content %}<h1>Customer System</h1><form method="post"><label>Customer name<input name="name" required></label><label>Email<input name="email" type="email"></label><label>Internet package<input name="package_name"></label><label>Sector<input name="sector"></label><button>Add customer</button></form><h2>Customers</h2><ul>{% for customer in customers %}<li><strong>{{ customer.name }}</strong> — {{ customer.package_name }} — {{ customer.sector }}</li>{% else %}<li>No customers yet.</li>{% endfor %}</ul>{% endblock %}
+

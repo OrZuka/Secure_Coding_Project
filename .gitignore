@@ -1,0 +1,35 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments and local packages
+.venv/
+venv/
+env/
+.test_deps/
+.test_deps_local/
+
+# Local app data
+*.db
+*.sqlite
+*.sqlite3
+mail_outbox.txt
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+

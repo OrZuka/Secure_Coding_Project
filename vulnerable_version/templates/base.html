@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Communication_LTD - Vulnerable Lab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header><strong>Communication_LTD</strong><span class="danger">VULNERABLE CLASSROOM VERSION</span></header>
+  <nav><a href="{{ url_for('index') }}">Home</a><a href="{{ url_for('register') }}">Register</a><a href="{{ url_for('login') }}">Login</a><a href="{{ url_for('forgot_password') }}">Forgot password</a>{% if current_user %}<a href="{{ url_for('system') }}">System</a><a href="{{ url_for('change_password') }}">Change password</a><a href="{{ url_for('logout') }}">Logout</a>{% endif %}</nav>
+  <main>
+    <div class="warning">Intentionally vulnerable. Run only on 127.0.0.1 with fake classroom data.</div>
+    {% for category, message in get_flashed_messages(with_categories=true) %}<div class="message {{ category }}">{{ message|safe }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
+

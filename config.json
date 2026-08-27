@@ -1,0 +1,19 @@
+{
+  "password": {
+    "min_length": 10,
+    "require_uppercase": true,
+    "require_lowercase": true,
+    "require_digit": true,
+    "require_special": true,
+    "history_count": 3,
+    "dictionary_file": "password_dictionary.txt"
+  },
+  "login": {
+    "max_attempts": 3
+  },
+  "mail": {
+    "mode": "file",
+    "outbox_file": "mail_outbox.txt"
+  }
+}
+
