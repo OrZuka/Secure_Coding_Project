@@ -1,2 +1,1 @@
-{% extends "base.html" %}{% block content %}<h1>Register</h1><form method="post"><label>Username<input name="username" required></label><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required></label><button>Create user</button></form>{% endblock %}
-
+{% extends "base.html" %}{% block content %}<h1>Register</h1><form method="post"><label>Username<input name="username" value="{{ username }}" required></label><label>Email<input name="email" type="email" value="{{ email }}" required></label><label>Password<input name="password" type="password" required></label><label>Confirm password<input name="password_confirmation" type="password" required></label><button>Create user</button></form>{% endblock %}

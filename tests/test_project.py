@@ -24,7 +24,7 @@ class ProjectTests(unittest.TestCase):
             client = app.test_client()
             response = client.post(
                 "/register",
-                data={"username": "student", "email": "student@example.test", "password": "StrongPass1!"},
+                data={"username": "student", "email": "student@example.test", "password": "StrongPass1!", "password_confirmation": "StrongPass1!"},
             )
             self.assertEqual(response.status_code, 302)
             response = client.post("/login", data={"username": "student", "password": "StrongPass1!"})
@@ -44,7 +44,7 @@ class ProjectTests(unittest.TestCase):
             client = app.test_client()
             client.post(
                 "/register",
-                data={"username": "labuser", "email": "lab@example.test", "password": "StrongPass1!"},
+                data={"username": "labuser", "email": "lab@example.test", "password": "StrongPass1!", "password_confirmation": "StrongPass1!"},
             )
             client.post("/login", data={"username": "labuser", "password": "StrongPass1!"})
             payload = '<script>alert("stored")</script>'
@@ -62,7 +62,7 @@ class ProjectTests(unittest.TestCase):
             client = app.test_client()
             client.post(
                 "/register",
-                data={"username": "lockeduser", "email": "locked@example.test", "password": "StrongPass1!"},
+                data={"username": "lockeduser", "email": "locked@example.test", "password": "StrongPass1!", "password_confirmation": "StrongPass1!"},
             )
             for _ in range(3):
                 client.post("/login", data={"username": "lockeduser", "password": "WrongPass1!"})
@@ -72,6 +72,25 @@ class ProjectTests(unittest.TestCase):
                 follow_redirects=True,
             )
             self.assertIn(b"Account is locked", response.data)
+
+    def test_register_keeps_non_password_fields_and_checks_confirmation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = create_app("secure", Path(folder) / "test.db")
+            app.config.update(TESTING=True, SECRET_KEY="test")
+            client = app.test_client()
+            response = client.post(
+                "/register",
+                data={
+                    "username": "keep_me",
+                    "email": "keep@example.test",
+                    "password": "StrongPass1!",
+                    "password_confirmation": "DifferentPass1!",
+                },
+                follow_redirects=True,
+            )
+            self.assertIn(b"Password confirmation does not match", response.data)
+            self.assertIn(b'value="keep_me"', response.data)
+            self.assertIn(b'value="keep@example.test"', response.data)
 
 
 if __name__ == "__main__":

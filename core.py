@@ -150,13 +150,16 @@ def create_app(version: str, db_path: Path | None = None) -> Flask:
             username = request.form.get("username", "").strip()
             email = request.form.get("email", "").strip()
             password = request.form.get("password", "")
+            password_confirmation = request.form.get("password_confirmation", "")
             errors = validate_password(password, cfg)
             if not username or not email:
                 errors.append("Username and email are required.")
+            if password != password_confirmation:
+                errors.append("Password confirmation does not match.")
             if errors:
                 for error in errors:
                     flash(error, "error")
-                return render_template("register.html")
+                return render_template("register.html", username=username, email=email)
             salt, digest = make_password(password)
             try:
                 with db() as con:
@@ -178,7 +181,8 @@ def create_app(version: str, db_path: Path | None = None) -> Flask:
                 return redirect(url_for("login"))
             except sqlite3.Error as exc:
                 flash(f"Registration failed: {exc}", "error")
-        return render_template("register.html")
+                return render_template("register.html", username=username, email=email)
+        return render_template("register.html", username="", email="")
 
     @app.route("/login", methods=["GET", "POST"])
     def login():

@@ -29,7 +29,7 @@ htmlcov/
 # Editor and operating-system files
 .idea/
 .vscode/
+.vs/
 .DS_Store
 Thumbs.db
 desktop.ini
-
