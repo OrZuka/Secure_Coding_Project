@@ -29,6 +29,11 @@ class ProjectTests(unittest.TestCase):
             self.assertEqual(response.status_code, 302)
             response = client.post("/login", data={"username": "student", "password": "StrongPass1!"})
             self.assertEqual(response.status_code, 302)
+            response = client.get("/system")
+            self.assertNotIn(b">Register<", response.data)
+            self.assertNotIn(b">Forgot password<", response.data)
+            self.assertIn(b">Change password<", response.data)
+            self.assertIn(b">Logout<", response.data)
             response = client.post(
                 "/system",
                 data={"name": "<script>alert('x')</script>", "email": "customer@example.test", "package_name": "Package A", "sector": "Education"},

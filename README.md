@@ -39,7 +39,7 @@ Each version creates its own SQLite relational database. Password policy and log
 2. Login; after three failed attempts the account is locked.
 3. Change password by supplying the existing password; the last three passwords cannot be reused.
 4. Add a customer and display the entered customer's name.
-5. Forgot password generates a random value, stores its SHA-1 digest, and sends the value to the configured file outbox. Use the emailed value to reach the reset-password screen.
+5. Forgot password generates a reset code, stores its SHA-1 digest, and sends the code to the configured file outbox. Use the emailed code on the reset-password screen.
 
 ## Classroom demonstrations
 

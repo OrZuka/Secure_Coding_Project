@@ -134,7 +134,7 @@ def create_app(version: str, db_path: Path | None = None) -> Flask:
     def write_reset_email(email: str, token: str) -> None:
         outbox = version_dir / cfg["mail"]["outbox_file"]
         with outbox.open("a", encoding="utf-8") as handle:
-            handle.write(f"To: {email}\nCommunication_LTD password reset value: {token}\n\n")
+            handle.write(f"To: {email}\nCommunication_LTD password reset code: {token}\n\n")
 
     @app.context_processor
     def template_context():
@@ -297,7 +297,7 @@ def create_app(version: str, db_path: Path | None = None) -> Flask:
                         (user["id"], token_sha1, datetime.now(timezone.utc).isoformat()),
                     )
                     write_reset_email(email, token)
-            flash("If the email exists, a random reset value was sent.", "success")
+            flash("If the email exists, a reset code has been sent to it.", "success")
             return redirect(url_for("reset_password"))
         return render_template("forgot_password.html")
 
@@ -314,7 +314,7 @@ def create_app(version: str, db_path: Path | None = None) -> Flask:
                     (token_sha1,),
                 ).fetchone()
                 if not record:
-                    errors.append("Reset value is invalid or already used.")
+                    errors.append("Reset code is invalid or already used.")
                 if record:
                     history = con.execute(
                         "SELECT salt,password_hmac FROM password_history WHERE user_id=? ORDER BY id DESC LIMIT ?",

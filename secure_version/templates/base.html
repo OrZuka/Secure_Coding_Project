@@ -8,11 +8,21 @@
 </head>
 <body>
   <header><strong>Communication_LTD</strong><span class="secure">SECURE VERSION</span></header>
-  <nav><a href="{{ url_for('index') }}">Home</a><a href="{{ url_for('register') }}">Register</a><a href="{{ url_for('login') }}">Login</a><a href="{{ url_for('forgot_password') }}">Forgot password</a>{% if current_user %}<a href="{{ url_for('system') }}">System</a><a href="{{ url_for('change_password') }}">Change password</a><a href="{{ url_for('logout') }}">Logout</a>{% endif %}</nav>
+  <nav>
+    <a href="{{ url_for('index') }}">Home</a>
+    {% if current_user %}
+      <a href="{{ url_for('system') }}">System</a>
+      <a href="{{ url_for('change_password') }}">Change password</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    {% else %}
+      <a href="{{ url_for('register') }}">Register</a>
+      <a href="{{ url_for('login') }}">Login</a>
+      <a href="{{ url_for('forgot_password') }}">Forgot password</a>
+    {% endif %}
+  </nav>
   <main>
     {% for category, message in get_flashed_messages(with_categories=true) %}<div class="message {{ category }}">{{ message }}</div>{% endfor %}
     {% block content %}{% endblock %}
   </main>
 </body>
 </html>
-
