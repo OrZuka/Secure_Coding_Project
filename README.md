@@ -1,52 +1,120 @@
-# Communication_LTD cyber final project
+# Communication_LTD — Cyber Final Project
 
-This is my Communication_LTD web project. There are two versions so the vulnerable and fixed code can be tested separately:
+A web information system for the fictional ISP **Communication_LTD**, built to demonstrate secure
+coding principles alongside the two attacks from the course: SQL Injection and Stored XSS.
 
-- `secure_version`: protected SQL statements use parameters and displayed user data is HTML-encoded by Jinja auto-escaping.
-- `vulnerable_version`: Register, Login, and Customer use unsafe SQL strings, and the customer list renders stored data without encoding for the SQLi and Stored-XSS demos.
+The project ships in **two versions that share one codebase** (`core.py`). A single `vulnerable`
+flag flips the handful of places that differ, so ~90% of the code is identical between them:
 
-The vulnerable version is for an isolated classroom lab only. Never expose it to a network or real data.
+- **`secure_version`** — parameterized SQL everywhere, and user data is HTML-encoded before display.
+- **`vulnerable_version`** — Register, Login and Add-Customer build SQL by string concatenation, and
+  the customer list renders stored input without encoding, for the required SQLi and Stored-XSS demos.
+
+> The vulnerable version is for an isolated classroom lab only. Never expose it to a network or real data.
 
 ## Setup
 
-Use Python 3.11 or newer from this folder:
+Python 3.11+ from the project folder:
 
-```powershell
+```bash
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-Run the secure version:
+Run each version (they use separate ports and separate databases):
 
-```powershell
-python secure_version\app.py
+```bash
+python secure_version/app.py       # http://127.0.0.1:5050
+python vulnerable_version/app.py    # http://127.0.0.1:5001
 ```
 
-Run the vulnerable version on its separate port:
+Use `127.0.0.1`, not `localhost` — on macOS, `localhost:5000` is intercepted by AirPlay, which is why
+the secure app listens on 5050.
 
-```powershell
-python vulnerable_version\app.py
+Each version creates its own SQLite relational database on first run. Deleting a `*.db` file simply
+recreates the schema on the next launch (they are gitignored, as is `mail_outbox.txt`).
+
+## Configuration — `config.json`
+
+All security policy is admin-tunable here. Changes take effect on the next app start.
+
+```json
+{
+  "password": {
+    "min_length": 10,
+    "require_uppercase": true,
+    "require_lowercase": true,
+    "require_digit": true,
+    "require_special": true,
+    "history_count": 3,
+    "dictionary_file": "password_dictionary.txt"
+  },
+  "login": {
+    "max_attempts": 3,
+    "lockout_minutes": 30
+  },
+  "mail": {
+    "mode": "file",
+    "outbox_file": "mail_outbox.txt",
+    "smtp": { "host": "smtp.gmail.com", "port": 587, "use_tls": true, "from_address": "" }
+  }
+}
 ```
 
-Open `http://127.0.0.1:5000` for secure or `http://127.0.0.1:5001` for vulnerable.
+| Key | Meaning |
+| --- | --- |
+| `min_length` | Minimum password length. |
+| `require_uppercase / lowercase / digit / special` | Character-class requirements for a complex password. |
+| `history_count` | How many previous passwords cannot be reused. Raising it looks further back immediately (full history is retained). |
+| `dictionary_file` | External banned-password list; edit the file to grow it, no code change needed. |
+| `max_attempts` | Failed logins before the account locks. |
+| `lockout_minutes` | How long an account stays locked; the next attempt after the window auto-releases it. |
+| `mail.mode` | `"file"` writes reset codes to the outbox (offline dev); `"smtp"` sends real email. |
 
-Each version creates its own SQLite relational database. Password policy and login attempt limits are managed in `config.json`. Reset messages are written to the version's `mail_outbox.txt`, simulating delivery to the user's registered email without requiring external mail credentials.
+### Email delivery
+
+In `"file"` mode, reset codes are appended to the version's `mail_outbox.txt`. To send real email, set
+`mail.mode` to `"smtp"`, fill in the `smtp` block, and provide credentials via **environment variables**
+(never commit them):
+
+```bash
+export COMMUNICATION_LTD_SMTP_USER="you@example.com"
+export COMMUNICATION_LTD_SMTP_PASS="an-app-password"
+```
+
+Set `COMMUNICATION_LTD_SECRET` too, to keep sessions stable across restarts.
 
 ## Main flows
 
-1. Register with username, email, and a policy-compliant password.
-2. Login; after three failed attempts the account is locked.
-3. Change password by supplying the existing password; the last three passwords cannot be reused.
-4. Add a customer and display the entered customer's name.
-5. Forgot password generates a reset code, stores its SHA-1 digest, and sends the code to the configured file outbox. Use the emailed code on the reset-password screen.
+1. **Register** — username, email, and a policy-compliant password. Passwords are stored as a salted
+   HMAC (unique 32-byte salt per user); the plaintext is never stored.
+2. **Login** — after `max_attempts` failures the account locks for `lockout_minutes`, then auto-unlocks.
+   The secure build returns one generic failure message (no username enumeration).
+3. **Change password** — requires the current password; the new one must pass the full policy and must
+   not match the last `history_count` passwords.
+4. **System (customers)** — add a customer (name, ID number, phone, area, package) and see the list.
+   `package` is a dropdown validated server-side against `basic / premium / unlimited`.
+5. **Forgot password** — generates a reset code **defined using SHA-1**, stores only a hash of it, and
+   sends the code to the registered email. Enter the code on the reset screen to set a new password.
 
-## Classroom demonstrations
+## Classroom demonstrations (vulnerable version only, fake data only)
 
-Use only fake data in the vulnerable version.
+- **Stored XSS** — add a customer whose name is `<script>alert(document.cookie)</script>`. The
+  vulnerable list renders it raw and it executes for anyone who opens the page; the secure list shows it
+  as text. Defense: the secure build calls `html.escape()` (via the `encode()` helper in `core.py`),
+  the encoding equivalent of `Server.HtmlEncode`.
+- **SQL Injection** — the vulnerable Register, Login and Add-Customer queries concatenate input.
+  - Login auth-bypass: put `' OR '1'='1' -- ` in the **username** field.
+    Note: SQLite's comment token is `--` (with a trailing space), **not** MySQL's `#`. Typing `#` here
+    raises `unrecognized token: "#"`, which also demonstrates the reflected-error-message issue.
+  - The secure version uses parameterized queries and blocks all of the above.
 
-- Stored XSS: add a customer name such as `<script>alert("Stored XSS")</script>`; the vulnerable customer list executes it, while the secure list displays it as text.
-- SQL injection: compare the SQL strings in `core.py` for Register, Login, and Add Customer with the parameterized queries in the secure version.
-- Encoding: compare the vulnerable `|safe` customer rendering with normal Jinja rendering in the secure template.
+## Tests
 
-The unsafe queries have short comments next to them so they are easy to find during the demo.
+```bash
+python -m unittest discover -s tests
+```
+
+Covers password hashing and policy, secure register/login/customer, the account-lockout flow, the
+Stored-XSS lab, and the login SQL-injection bypass (present in vulnerable, blocked in secure).

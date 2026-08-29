@@ -36,7 +36,7 @@ class ProjectTests(unittest.TestCase):
             self.assertIn(b">Logout<", response.data)
             response = client.post(
                 "/system",
-                data={"name": "<script>alert('x')</script>", "email": "customer@example.test", "package_name": "Package A", "sector": "Education"},
+                data={"name": "<script>alert('x')</script>", "id_number": "312345678", "phone": "050-1112222", "area": "North", "package": "basic"},
                 follow_redirects=True,
             )
             self.assertIn(b"&lt;script&gt;", response.data)
@@ -55,7 +55,7 @@ class ProjectTests(unittest.TestCase):
             payload = '<script>alert("stored")</script>'
             response = client.post(
                 "/system",
-                data={"name": payload, "email": "", "package_name": "", "sector": ""},
+                data={"name": payload, "id_number": "", "phone": "", "area": "", "package": "basic"},
                 follow_redirects=True,
             )
             self.assertIn(payload.encode(), response.data)
@@ -96,6 +96,42 @@ class ProjectTests(unittest.TestCase):
             self.assertIn(b"Password confirmation does not match", response.data)
             self.assertIn(b'value="keep_me"', response.data)
             self.assertIn(b'value="keep@example.test"', response.data)
+
+
+    def test_vulnerable_login_sqli_bypass(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = create_app("vulnerable", Path(folder) / "test.db")
+            app.config.update(TESTING=True, SECRET_KEY="test")
+            client = app.test_client()
+            client.post(
+                "/register",
+                data={"username": "cyber", "email": "c@example.test", "password": "StrongPass1!", "password_confirmation": "StrongPass1!"},
+            )
+            client.get("/logout")
+            # SQLite comment token is --, not MySQL's #
+            response = client.post(
+                "/login",
+                data={"username": "' OR '1'='1' -- ", "password": "anything"},
+                follow_redirects=True,
+            )
+            self.assertIn(b"Customer System", response.data)  # bypass succeeds in vulnerable build
+
+    def test_secure_login_resists_sqli_bypass(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = create_app("secure", Path(folder) / "test.db")
+            app.config.update(TESTING=True, SECRET_KEY="test")
+            client = app.test_client()
+            client.post(
+                "/register",
+                data={"username": "cyber", "email": "c@example.test", "password": "StrongPass1!", "password_confirmation": "StrongPass1!"},
+            )
+            client.get("/logout")
+            response = client.post(
+                "/login",
+                data={"username": "' OR '1'='1' -- ", "password": "anything"},
+                follow_redirects=True,
+            )
+            self.assertNotIn(b"Customer System", response.data)  # parameterized query blocks it
 
 
 if __name__ == "__main__":
