@@ -55,9 +55,9 @@ All security policy is admin-tunable here. Changes take effect on the next app s
     "lockout_minutes": 30
   },
   "mail": {
-    "mode": "file",
+    "mode": "smtp",
     "outbox_file": "mail_outbox.txt",
-    "smtp": { "host": "smtp.gmail.com", "port": 587, "use_tls": true, "from_address": "" }
+    "smtp": { "host": "smtp-relay.brevo.com", "port": 587, "use_tls": true, "from_address": "REPLACE_WITH_VERIFIED_BREVO_SENDER" }
   }
 }
 ```
@@ -74,16 +74,44 @@ All security policy is admin-tunable here. Changes take effect on the next app s
 
 ### Email delivery
 
-In `"file"` mode, reset codes are appended to the version's `mail_outbox.txt`. To send real email, set
-`mail.mode` to `"smtp"`, fill in the `smtp` block, and provide credentials via **environment variables**
-(never commit them):
+Two modes, switched with `mail.mode`:
+
+- **`"file"`** (offline dev): reset codes are appended to the version's `mail_outbox.txt` — no network, no account.
+- **`"smtp"`** (real delivery): the code is emailed via the configured SMTP relay.
+
+The repo is configured for real delivery through **Brevo** (a free transactional-email provider — no
+personal mailbox, no 2FA/app-password setup). Everything except the two credentials lives in
+`config.json`; the credentials come from **environment variables and are never committed** (this is a
+public repo — a committed SMTP key gets scanned, revoked, and abused).
+
+**One-time provider setup (do once per sender):**
+
+1. Sign up free at [brevo.com](https://www.brevo.com).
+2. **Verify a sender address** (Senders & Domains → add a sender → click the confirmation email). This
+   verified address is what you put in `smtp.from_address` in `config.json`. Sending will be *rejected*
+   if `from_address` is not a verified sender.
+3. **SMTP & API → SMTP → generate an SMTP key.** The panel shows your **login** (e.g.
+   `xxxxxx@smtp-brevo.com`) and lets you copy the **key**.
+
+**Credentials via `.env` (recommended).** Copy the template and fill in your values — the app
+auto-loads `.env` on startup (via `python-dotenv`), so you set the key once instead of exporting it
+every run:
 
 ```bash
-export COMMUNICATION_LTD_SMTP_USER="you@example.com"
-export COMMUNICATION_LTD_SMTP_PASS="an-app-password"
+cp .env.example .env
+# then edit .env and paste your Brevo SMTP key into COMMUNICATION_LTD_SMTP_PASS
+python secure_version/app.py
 ```
 
-Set `COMMUNICATION_LTD_SECRET` too, to keep sessions stable across restarts.
+`.env` is gitignored (`.env.example` is the committed template) — **never commit `.env`**. The SMTP key
+is the only secret; share it with a teammate out-of-band (a DM or password-manager note), or each
+teammate makes their own free Brevo account and uses their own key. Prefer not to use a file? Export
+the same three variables in your shell instead. If credentials are missing, Forgot Password logs the
+error and shows the generic "if the email exists…" message instead of crashing — so the app still runs,
+it just doesn't send.
+
+Any other SMTP provider works too: swap `smtp.host`/`smtp.port` and set the same two env vars. For a
+fully offline demo, set `mail.mode` back to `"file"` and read the code from `mail_outbox.txt`.
 
 ## Main flows
 

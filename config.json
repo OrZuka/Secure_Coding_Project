@@ -13,13 +13,13 @@
     "lockout_minutes": 30
   },
   "mail": {
-    "mode": "file",
+    "mode": "smtp",
     "outbox_file": "mail_outbox.txt",
     "smtp": {
-      "host": "smtp.gmail.com",
+      "host": "smtp-relay.brevo.com",
       "port": 587,
       "use_tls": true,
-      "from_address": ""
+      "from_address": "shahara.88@gmail.com"
     }
   }
 }

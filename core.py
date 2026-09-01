@@ -18,6 +18,15 @@ from markupsafe import Markup
 
 ROOT = Path(__file__).resolve().parent
 
+# Load credentials from a local .env if present (gitignored; never committed).
+# Optional dependency: the app runs fine without it, using whatever is already in the environment.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env")
+except ImportError:
+    pass
+
 
 def load_config() -> dict:
     return json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
