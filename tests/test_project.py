@@ -1,7 +1,10 @@
+import smtplib
+import sqlite3
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -132,6 +135,114 @@ class ProjectTests(unittest.TestCase):
                 follow_redirects=True,
             )
             self.assertNotIn(b"Customer System", response.data)  # parameterized query blocks it
+
+
+    def test_migration_upgrades_old_schema_and_preserves_data(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db_path = Path(folder) / "legacy.db"
+            salt, digest = make_password("StrongPass1!")
+            legacy = sqlite3.connect(db_path)
+            legacy.executescript(
+                """
+                CREATE TABLE users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    salt TEXT NOT NULL,
+                    password_hmac TEXT NOT NULL,
+                    failed_attempts INTEGER NOT NULL DEFAULT 0,
+                    locked INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE customers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    email TEXT,
+                    package_name TEXT,
+                    sector TEXT,
+                    created_by INTEGER
+                );
+                CREATE TABLE reset_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token_sha1 TEXT NOT NULL,
+                    used INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+                """
+            )
+            legacy.execute(
+                "INSERT INTO users(username,email,salt,password_hmac) VALUES (?,?,?,?)",
+                ("legacy", "legacy@example.test", salt, digest),
+            )
+            legacy.execute(
+                "INSERT INTO customers(name,email,package_name,sector,created_by) VALUES (?,?,?,?,?)",
+                ("Old Customer", "old@example.test", "premium", "South", 1),
+            )
+            legacy.execute(
+                "INSERT INTO reset_tokens(user_id,token_sha1,created_at) VALUES (?,?,?)",
+                (1, "deadbeef", "2024-01-01T00:00:00+00:00"),
+            )
+            legacy.commit()
+            legacy.close()
+
+            # create_app runs migrate_db against the existing database.
+            app = create_app("secure", db_path)
+            app.config.update(TESTING=True, SECRET_KEY="test")
+
+            con = sqlite3.connect(db_path)
+            con.row_factory = sqlite3.Row
+            user_cols = {r["name"] for r in con.execute("PRAGMA table_info(users)")}
+            customer_cols = {r["name"] for r in con.execute("PRAGMA table_info(customers)")}
+            reset_cols = {r["name"] for r in con.execute("PRAGMA table_info(reset_tokens)")}
+            self.assertIn("locked_until", user_cols)
+            self.assertIn("area", customer_cols)
+            self.assertIn("package", customer_cols)
+            self.assertNotIn("email", customer_cols)
+            self.assertIn("token_hash", reset_cols)
+            customer = con.execute("SELECT * FROM customers WHERE id = 1").fetchone()
+            self.assertEqual(customer["area"], "South")
+            self.assertEqual(customer["package"], "premium")
+            con.close()
+
+            # The preserved user can still log in after migration.
+            client = app.test_client()
+            response = client.post("/login", data={"username": "legacy", "password": "StrongPass1!"})
+            self.assertEqual(response.status_code, 302)
+
+    def _smtp_app(self, folder):
+        smtp_cfg = load_config()
+        smtp_cfg["mail"] = {
+            "mode": "smtp",
+            "outbox_file": "mail_outbox.txt",
+            "smtp": {"host": "smtp.example.test", "port": 587, "use_tls": True, "from_address": "noreply@example.test"},
+        }
+        with mock.patch("core.load_config", return_value=smtp_cfg):
+            app = create_app("secure", Path(folder) / "test.db")
+        app.config.update(TESTING=True, SECRET_KEY="test")
+        client = app.test_client()
+        client.post(
+            "/register",
+            data={"username": "mailer", "email": "mailer@example.test", "password": "StrongPass1!", "password_confirmation": "StrongPass1!"},
+        )
+        return client
+
+    def test_forgot_password_smtp_failure_does_not_500(self):
+        with tempfile.TemporaryDirectory() as folder:
+            client = self._smtp_app(folder)
+            with mock.patch("smtplib.SMTP", side_effect=smtplib.SMTPException("boom")):
+                response = client.post("/forgot-password", data={"email": "mailer@example.test"})
+            # Delivery failed but the request is handled gracefully, not a 500.
+            self.assertEqual(response.status_code, 302)
+
+    def test_forgot_password_smtp_success_sends_message(self):
+        with tempfile.TemporaryDirectory() as folder:
+            client = self._smtp_app(folder)
+            server = mock.MagicMock()
+            with mock.patch("smtplib.SMTP") as smtp_ctor:
+                smtp_ctor.return_value.__enter__.return_value = server
+                response = client.post("/forgot-password", data={"email": "mailer@example.test"})
+            self.assertEqual(response.status_code, 302)
+            server.send_message.assert_called_once()
 
 
 if __name__ == "__main__":

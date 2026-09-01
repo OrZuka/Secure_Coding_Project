@@ -146,7 +146,47 @@ def create_app(version: str, db_path: Path | None = None) -> Flask:
                 """
             )
 
+    def migrate_db() -> None:
+        """Bring a database created by an older schema up to date without losing data.
+        CREATE TABLE IF NOT EXISTS never alters an existing table, so a DB from an
+        earlier version keeps its old columns; each step below is idempotent."""
+        def columns(con, table):
+            return {row["name"] for row in con.execute(f"PRAGMA table_info({table})")}
+
+        with db() as con:
+            user_cols = columns(con, "users")
+            if user_cols and "locked_until" not in user_cols:
+                con.execute("ALTER TABLE users ADD COLUMN locked_until TEXT")
+
+            customer_cols = columns(con, "customers")
+            if customer_cols and "area" not in customer_cols:
+                # Old columns were (name, email, package_name, sector). Rebuild with the
+                # new shape, mapping sector->area and package_name->package; email is dropped.
+                con.executescript(
+                    """
+                    CREATE TABLE customers_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        id_number TEXT,
+                        phone TEXT,
+                        area TEXT,
+                        package TEXT,
+                        created_by INTEGER,
+                        FOREIGN KEY(created_by) REFERENCES users(id)
+                    );
+                    INSERT INTO customers_new(id, name, id_number, phone, area, package, created_by)
+                        SELECT id, name, NULL, NULL, sector, package_name, created_by FROM customers;
+                    DROP TABLE customers;
+                    ALTER TABLE customers_new RENAME TO customers;
+                    """
+                )
+
+            reset_cols = columns(con, "reset_tokens")
+            if reset_cols and "token_hash" not in reset_cols and "token_sha1" in reset_cols:
+                con.execute("ALTER TABLE reset_tokens RENAME COLUMN token_sha1 TO token_hash")
+
     init_db()
+    migrate_db()
 
     def current_user():
         user_id = session.get("user_id")
@@ -170,7 +210,10 @@ def create_app(version: str, db_path: Path | None = None) -> Flask:
         user = con.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         return user, (bool(user) and matches_password(password, user["salt"], user["password_hmac"]))
 
-    def send_reset_email(email: str, token: str) -> None:
+    def send_reset_email(email: str, token: str) -> bool:
+        """Deliver the reset code. Returns True on success, False on a delivery failure.
+        SMTP problems (bad config, unreachable host, TLS/auth failure, rejected message)
+        are logged server-side and swallowed so Forgot Password never returns an HTTP 500."""
         mail_cfg = cfg["mail"]
         subject = "Communication_LTD password reset code"
         body = f"Your Communication_LTD password reset code: {token}"
@@ -182,22 +225,32 @@ def create_app(version: str, db_path: Path | None = None) -> Flask:
             smtp = mail_cfg.get("smtp", {})
             username = os.environ.get("COMMUNICATION_LTD_SMTP_USER")
             password = os.environ.get("COMMUNICATION_LTD_SMTP_PASS")
+            sender = smtp.get("from_address") or username
+            if not sender:
+                app.logger.error("SMTP reset email not sent: no sender address (set from_address or COMMUNICATION_LTD_SMTP_USER).")
+                return False
             message = EmailMessage()
             message["Subject"] = subject
-            message["From"] = smtp.get("from_address") or username
+            message["From"] = sender
             message["To"] = email
             message.set_content(body)
-            with smtplib.SMTP(smtp.get("host", "localhost"), int(smtp.get("port", 587))) as server:
-                if smtp.get("use_tls", True):
-                    server.starttls()
-                if username and password:
-                    server.login(username, password)
-                server.send_message(message)
+            try:
+                with smtplib.SMTP(smtp.get("host", "localhost"), int(smtp.get("port", 587)), timeout=10) as server:
+                    if smtp.get("use_tls", True):
+                        server.starttls()
+                    if username and password:
+                        server.login(username, password)
+                    server.send_message(message)
+            except (smtplib.SMTPException, OSError) as exc:
+                app.logger.error("SMTP reset email delivery failed: %s", exc)
+                return False
+            return True
         else:
             # File mode: simulate delivery to the version's outbox for offline development.
             outbox = version_dir / mail_cfg["outbox_file"]
             with outbox.open("a", encoding="utf-8") as handle:
                 handle.write(f"To: {email}\n{subject}: {token}\n\n")
+            return True
 
     def encode(value):
         # Secure build encodes special characters before display (the Jinja equivalent of
