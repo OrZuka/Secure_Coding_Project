@@ -9,11 +9,17 @@
     "dictionary_file": "password_dictionary.txt"
   },
   "login": {
-    "max_attempts": 3
+    "max_attempts": 3,
+    "lockout_minutes": 30
   },
   "mail": {
-    "mode": "file",
-    "outbox_file": "mail_outbox.txt"
+    "mode": "smtp",
+    "outbox_file": "mail_outbox.txt",
+    "smtp": {
+      "host": "smtp-relay.brevo.com",
+      "port": 587,
+      "use_tls": true,
+      "from_address": "shahara.88@gmail.com"
+    }
   }
 }
-
