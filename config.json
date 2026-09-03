@@ -13,7 +13,7 @@
     "lockout_minutes": 30
   },
   "mail": {
-    "mode": "smtp",
+    "mode": "file",
     "outbox_file": "mail_outbox.txt",
     "smtp": {
       "host": "smtp-relay.brevo.com",
